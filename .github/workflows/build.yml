@@ -1,0 +1,56 @@
+name: Build
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install PyQt6 Pillow pyinstaller
+
+      - name: Build executable
+        run: >
+          pyinstaller
+          --onefile
+          --windowed
+          --name FilmCollage
+          --icon icon.ico
+          main.py
+        continue-on-error: false
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FilmCollage-Windows
+          path: dist/FilmCollage.exe
+          retention-days: 30
+
+  # Create a GitHub Release when a version tag is pushed, attaching the exe.
+  release:
+    needs: build-windows
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: FilmCollage-Windows
+          path: dist/
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/FilmCollage.exe
+          generate_release_notes: true
