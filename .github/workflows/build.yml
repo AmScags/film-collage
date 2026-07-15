@@ -2,13 +2,47 @@ name: Build
 
 on:
   push:
-    tags:
-      - "v*"
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 jobs:
+  # ── Web app → Cloudflare Pages ───────────────────────────────────────────────
+  deploy-web:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: web
+
+      - name: Build
+        run: npm run build
+        working-directory: web
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy web/dist --project-name=film-collage --branch=${{ github.ref_name }}
+
+  # ── Desktop .exe → GitHub Releases ──────────────────────────────────────────
   build-windows:
     runs-on: windows-latest
+    if: startsWith(github.ref, 'refs/tags/')
     steps:
       - uses: actions/checkout@v4
 
@@ -20,14 +54,7 @@ jobs:
         run: pip install PyQt6 Pillow pyinstaller
 
       - name: Build executable
-        run: >
-          pyinstaller
-          --onefile
-          --windowed
-          --name FilmCollage
-          --icon icon.ico
-          main.py
-        continue-on-error: false
+        run: pyinstaller --onefile --windowed --name FilmCollage main.py
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -36,7 +63,6 @@ jobs:
           path: dist/FilmCollage.exe
           retention-days: 30
 
-  # Create a GitHub Release when a version tag is pushed, attaching the exe.
   release:
     needs: build-windows
     runs-on: ubuntu-latest

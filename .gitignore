@@ -8,3 +8,5 @@ exports/
 dist/
 build/
 *.spec
+web/node_modules/
+web/dist/
